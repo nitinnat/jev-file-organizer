@@ -1,0 +1,15 @@
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.coverage
+.claims/
+htmlcov/
+dist/
+*.egg-info/
+evaluation-report.json
+sample-folder/
+sample-manifest.json
+**/.jfo-cache.json
+**/.jfo/

@@ -1,0 +1,11 @@
+services:
+  jfo:
+    build: .
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      TYPESAFE_DEFAULT_MODEL: ${TYPESAFE_DEFAULT_MODEL:-jev-latest}
+    volumes:
+      - ${JFO_TARGET:-./sample-folder}:/data
+    working_dir: /data

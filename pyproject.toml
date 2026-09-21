@@ -1,0 +1,57 @@
+[project]
+name = "jev-file-organizer"
+version = "0.2.0"
+description = "Preview-first recursive file organization powered by Jev"
+authors = [{ name = "Jev File Organizer contributors" }]
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.12,<3.14"
+keywords = ["cli", "file-organizer", "jev", "markitdown"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Desktop Environment :: File Managers",
+]
+dependencies = [
+    "markitdown[all]==0.1.7",
+    "platformdirs>=4.4.0,<5.0.0",
+    "python-dotenv>=1.1.1,<2.0.0",
+    "rich>=14.1.0,<15.0.0",
+    "typer>=0.19.2,<0.20.0",
+    "typesafe-sdk>=0.7.0,<0.8.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/nitinnat/jev-file-organizer"
+Repository = "https://github.com/nitinnat/jev-file-organizer"
+Issues = "https://github.com/nitinnat/jev-file-organizer/issues"
+
+[project.scripts]
+jfo = "jev_file_organizer.cli:app"
+
+[tool.poetry]
+packages = [{ include = "jev_file_organizer", from = "src" }]
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.4.2"
+pytest-cov = "^7.0.0"
+ruff = "^0.13.1"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
