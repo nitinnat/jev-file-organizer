@@ -39,7 +39,7 @@ packages = [{ include = "jev_file_organizer", from = "src" }]
 [tool.poetry.group.dev.dependencies]
 pytest = "^9.0.3"
 pytest-cov = "^7.0.0"
-ruff = "^0.13.1"
+ruff = "^0.16.9"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
