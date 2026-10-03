@@ -37,7 +37,7 @@ jfo = "jev_file_organizer.cli:app"
 packages = [{ include = "jev_file_organizer", from = "src" }]
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^8.4.2"
+pytest = "^9.0.3"
 pytest-cov = "^7.0.0"
 ruff = "^0.13.1"
 
