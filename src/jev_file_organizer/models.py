@@ -7,7 +7,6 @@ class DecisionStatus(StrEnum):
     MOVE = "move"
     NO_MATCH = "no_match"
     LOW_CONFIDENCE = "low_confidence"
-    ERROR = "error"
     COLLISION = "collision"
     MOVED = "moved"
 

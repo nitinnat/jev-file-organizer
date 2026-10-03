@@ -504,7 +504,6 @@ def render_plan(root: Path, decisions: list[Decision], apply: bool) -> None:
         DecisionStatus.NO_MATCH: "dim",
         DecisionStatus.LOW_CONFIDENCE: "yellow",
         DecisionStatus.COLLISION: "red",
-        DecisionStatus.ERROR: "red",
     }
     for decision in decisions:
         destination = (

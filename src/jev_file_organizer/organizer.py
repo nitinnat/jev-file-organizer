@@ -1,7 +1,6 @@
 import hashlib
 import json
 import logging
-import shutil
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -336,39 +335,3 @@ def support_proposed_folders(
                     f"proposed folder needs at least {min_folder_files} matching files"
                 )
     return supported
-
-
-def apply_plan(decisions: list[Decision], collision: str = "skip") -> None:
-    logger.info("[APPLY] start candidates=%d collision=%s", len(decisions), collision)
-    for decision in decisions:
-        if decision.status != DecisionStatus.MOVE or decision.destination is None:
-            continue
-        destination = decision.destination
-        if destination.exists():
-            if collision == "skip":
-                decision.status = DecisionStatus.COLLISION
-                decision.detail = "destination already exists"
-                logger.warning(
-                    "[APPLY] collision source=%s destination=%s", decision.source, destination
-                )
-                continue
-            destination = available_destination(destination)
-            decision.destination = destination
-
-        logger.info("[APPLY] move source=%s destination=%s", decision.source, destination)
-        shutil.move(decision.source, destination)
-        decision.status = DecisionStatus.MOVED
-    logger.info(
-        "[APPLY] complete moved=%d collisions=%d",
-        sum(decision.status == DecisionStatus.MOVED for decision in decisions),
-        sum(decision.status == DecisionStatus.COLLISION for decision in decisions),
-    )
-
-
-def available_destination(path: Path) -> Path:
-    counter = 1
-    while True:
-        candidate = path.with_name(f"{path.stem} ({counter}){path.suffix}")
-        if not candidate.exists():
-            return candidate
-        counter += 1
