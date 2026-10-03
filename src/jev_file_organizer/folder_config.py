@@ -58,9 +58,8 @@ def load_guidance(root: Path, folder: Path) -> FolderGuidance:
     return FolderGuidance(
         context=tuple(config.context for config in configs if config.context),
         rules=tuple(rule for config in configs for rule in config.rules),
-        candidate_names=tuple(
-            name for config in configs for name in config.candidate_names
-        ),
+        # claim: 2026-10-03-local-folder-candidates
+        candidate_names=configs[-1].candidate_names,
     )
 
 

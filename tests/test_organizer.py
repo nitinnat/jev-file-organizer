@@ -56,6 +56,34 @@ def test_recursive_plan_and_apply_uses_immediate_child_folders(tmp_path: Path) -
     assert (tmp_path / "unmatched.txt").exists()
 
 
+def test_plan_routes_file_through_complete_existing_hierarchy(tmp_path: Path) -> None:
+    (tmp_path / "Finance" / "Taxes" / "2026").mkdir(parents=True)
+    source = tmp_path / "invoice.txt"
+    source.write_text("Finance Taxes 2026", encoding="utf-8")
+
+    decisions, _ = create_plan(tmp_path, KeywordClassifier(), TextExtractor(), 0.7)
+
+    assert len(decisions) == 1
+    assert decisions[0].destination == tmp_path / "Finance" / "Taxes" / "2026" / source.name
+    assert decisions[0].detail == (
+        "Finance (0.90) → Finance/Taxes (0.90) → Finance/Taxes/2026 (0.90)"
+    )
+
+    apply_plan(decisions)
+    assert (tmp_path / "Finance" / "Taxes" / "2026" / source.name).is_file()
+
+
+def test_hierarchical_route_stops_at_last_approved_parent(tmp_path: Path) -> None:
+    (tmp_path / "Finance" / "Taxes").mkdir(parents=True)
+    source = tmp_path / "invoice.txt"
+    source.write_text("Finance invoice", encoding="utf-8")
+
+    decisions, _ = create_plan(tmp_path, KeywordClassifier(), TextExtractor(), 0.7)
+
+    assert decisions[0].destination == tmp_path / "Finance" / source.name
+    assert decisions[0].status == DecisionStatus.MOVE
+
+
 def test_apply_skips_existing_destination(tmp_path: Path) -> None:
     destination_folder = tmp_path / "Receipts"
     destination_folder.mkdir()

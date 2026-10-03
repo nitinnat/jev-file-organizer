@@ -3,7 +3,9 @@ from pathlib import Path
 from jev_file_organizer.folder_config import initialize_configs, load_guidance
 
 
-def test_guidance_inherits_context_rules_and_candidate_names(tmp_path: Path) -> None:
+def test_guidance_inherits_context_and_rules_but_keeps_candidates_local(
+    tmp_path: Path,
+) -> None:
     child = tmp_path / "Inbox"
     child.mkdir()
     (tmp_path / ".jfo.toml").write_text(
@@ -24,7 +26,7 @@ def test_guidance_inherits_context_rules_and_candidate_names(tmp_path: Path) -> 
         "Keep tax files separate",
         "Travel bookings stay together",
     )
-    assert guidance.candidate_names == ("Finance", "Travel")
+    assert guidance.candidate_names == ("Travel",)
 
 
 def test_recursive_initializer_preserves_existing_configs(tmp_path: Path) -> None:

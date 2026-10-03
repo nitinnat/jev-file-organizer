@@ -2,6 +2,21 @@
 
 Each section is an independently trackable work item. Status values describe product maturity, not implementation difficulty.
 
+## Execution Priority
+
+1. Performance, cost, and scale controls.
+2. Privacy and data controls.
+3. Evaluation and confidence calibration.
+4. Public packaging and distribution.
+5. Deterministic organization rules.
+6. Decision explanations and interactive review.
+7. Validate hierarchical routing on a labeled deep-tree corpus.
+8. Correction learning.
+9. Duplicate and filename management.
+10. Watch mode.
+
+This order minimizes irreversible risk: first make runs bounded and observable, then protect what leaves the machine, measure decision quality, and only afterward add more autonomous behavior.
+
 ## 1. Intelligent Folder Discovery — Implemented; Live Pilot Complete
 
 Mine possible folder names from filenames, sampled document text, corpus word counts, document-frequency counts, existing metadata, and user-provided seeds. Send the counted words and candidate names to Jev so every possible folder receives an independent usefulness confidence for that collection. Jev then classifies files into approved candidates. A proposed folder is created only when enough files independently qualify above the confidence threshold.
@@ -36,13 +51,15 @@ Capture accepted overrides and rejected moves as a local labeled dataset. Use co
 
 Show top candidate destinations, probability distributions, extraction method, and evidence snippets. Add commands for inspecting a decision and the exact bounded content sent to Jev.
 
-## 9. Complete Hierarchical Routing — Planned
+## 9. Complete Hierarchical Routing — Implemented
 
-Plan a full nested destination without mutating the tree between classification steps. Require each hop to pass policy and make the final path visible before applying.
+Plan a full nested destination without mutating the tree between classification steps. Every hop must clear policy, the final path is visible before applying, and the weakest accepted hop becomes the route confidence. Existing nested folders can form a complete route; newly proposed folders remain leaves until a later run so discovery cannot generate an unbounded hierarchy.
 
-## 10. Performance, Cost, and Scale Controls — Planned
+## 10. Performance, Cost, and Scale Controls — In Progress
 
 Add bounded concurrency, request chunking, rate limiting, cache statistics, estimated request counts, run budgets, and maximum-file limits. Avoid repeat extraction or classification for unchanged evidence and policies.
+
+First slice complete: lightweight commands now defer MarkItDown, ONNX Runtime, and the TypeSafe SDK until a command actually needs extraction or model access. Five isolated launches improved from a 0.770-second average to 0.096 seconds, with the first launch falling from 1.807 to 0.153 seconds. Next slices are request-count previews and hard budgets, then bounded Jev concurrency with rate-limit tests.
 
 ## 11. Evaluation and Confidence Calibration — Planned
 

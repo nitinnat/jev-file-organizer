@@ -29,6 +29,8 @@ class ExtractionCache:
         self.max_chars = max_chars
         self.hits = 0
         self.misses = 0
+        self.classification_hits = 0
+        self.classification_misses = 0
         self._documents: dict[Path, CacheDocument] = {}
         self._changed: set[Path] = set()
 
@@ -61,6 +63,43 @@ class ExtractionCache:
             "extraction": evidence.extraction.removeprefix("cache:"),
         }
         self._changed.add(evidence.path.parent)
+
+    def get_classification(self, path: Path, key: str) -> dict[str, object] | None:
+        if not self.enabled or self.refresh:
+            self.classification_misses += 1
+            return None
+        entry = self._entries(path.parent).get(path.name)
+        if (
+            not isinstance(entry, dict)
+            or entry.get("fingerprint") != self.fingerprint(path)
+            or not isinstance(entry.get("classifications"), dict)
+            or not isinstance(record := entry["classifications"].get(key), dict)
+            or not isinstance(record.get("choice"), str)
+            or not isinstance(record.get("confidence"), (int, float))
+            or not isinstance(record.get("probabilities"), dict)
+        ):
+            self.classification_misses += 1
+            return None
+        self.classification_hits += 1
+        return record
+
+    def put_classification(
+        self,
+        path: Path,
+        key: str,
+        record: dict[str, object],
+    ) -> None:
+        if not self.enabled:
+            return
+        entry = self._entries(path.parent).get(path.name)
+        if not isinstance(entry, dict) or entry.get("fingerprint") != self.fingerprint(path):
+            return
+        classifications = entry.setdefault("classifications", {})
+        if not isinstance(classifications, dict):
+            classifications = {}
+            entry["classifications"] = classifications
+        classifications[key] = record
+        self._changed.add(path.parent)
 
     def flush(self) -> None:
         for folder in self._changed:

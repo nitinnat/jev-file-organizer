@@ -11,6 +11,19 @@ IGNORED_DIRECTORIES = {".git", ".jfo", ".venv", "__pycache__"}
 IGNORED_FILES = {".jfo-cache.json", ".jfo.toml"}
 
 
+def child_folders(parent: Path, include_hidden: bool = False) -> tuple[Path, ...]:
+    if not parent.is_dir():
+        return ()
+    return tuple(
+        path
+        for path in sorted(parent.iterdir())
+        if path.is_dir()
+        and not path.is_symlink()
+        and path.name not in IGNORED_DIRECTORIES
+        and (include_hidden or not path.name.startswith("."))
+    )
+
+
 def scan(
     root: Path,
     include_hidden: bool = False,
@@ -26,11 +39,7 @@ def scan(
             if name not in IGNORED_DIRECTORIES and (include_hidden or not name.startswith("."))
         )
         parent_path = Path(parent)
-        destinations = tuple(
-            parent_path / name
-            for name in directory_names
-            if not (parent_path / name).is_symlink()
-        )
+        destinations = child_folders(parent_path, include_hidden)
         files = tuple(
             path
             for name in sorted(file_names)
