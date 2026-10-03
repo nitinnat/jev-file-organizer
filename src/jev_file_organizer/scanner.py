@@ -33,13 +33,15 @@ def scan(
     batches: list[FolderBatch] = []
 
     for parent, directory_names, file_names in os.walk(root, followlinks=False):
+        parent_path = Path(parent)
         directory_names[:] = sorted(
             name
             for name in directory_names
-            if name not in IGNORED_DIRECTORIES and (include_hidden or not name.startswith("."))
+            if name not in IGNORED_DIRECTORIES
+            and (include_hidden or not name.startswith("."))
+            and not (parent_path / name).is_symlink()
         )
-        parent_path = Path(parent)
-        destinations = child_folders(parent_path, include_hidden)
+        destinations = tuple(parent_path / name for name in directory_names)
         files = tuple(
             path
             for name in sorted(file_names)

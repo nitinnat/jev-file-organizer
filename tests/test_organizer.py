@@ -3,7 +3,8 @@ from pathlib import Path
 from jev_file_organizer.extraction import TextExtractor
 from jev_file_organizer.folder_config import FolderGuidance
 from jev_file_organizer.models import Decision, DecisionStatus, FileEvidence, FolderOption
-from jev_file_organizer.organizer import apply_plan, create_plan
+from jev_file_organizer.organizer import create_plan
+from jev_file_organizer.plans import resolve_collisions
 
 
 class KeywordClassifier:
@@ -39,7 +40,7 @@ class KeywordClassifier:
         return decisions
 
 
-def test_recursive_plan_and_apply_uses_immediate_child_folders(tmp_path: Path) -> None:
+def test_recursive_plan_uses_immediate_child_folders(tmp_path: Path) -> None:
     (tmp_path / "Work" / "Reports").mkdir(parents=True)
     (tmp_path / "Personal").mkdir()
     (tmp_path / "work-item.txt").write_text("Work planning", encoding="utf-8")
@@ -50,10 +51,10 @@ def test_recursive_plan_and_apply_uses_immediate_child_folders(tmp_path: Path) -
 
     assert len(decisions) == 3
     assert sum(decision.status == DecisionStatus.MOVE for decision in decisions) == 2
-    apply_plan(decisions)
-    assert (tmp_path / "Work" / "work-item.txt").exists()
-    assert (tmp_path / "Work" / "Reports" / "report.txt").exists()
-    assert (tmp_path / "unmatched.txt").exists()
+    destinations = {decision.source.name: decision.destination for decision in decisions}
+    assert destinations["work-item.txt"] == tmp_path / "Work" / "work-item.txt"
+    assert destinations["report.txt"] == tmp_path / "Work" / "Reports" / "report.txt"
+    assert destinations["unmatched.txt"] is None
 
 
 def test_plan_routes_file_through_complete_existing_hierarchy(tmp_path: Path) -> None:
@@ -69,10 +70,6 @@ def test_plan_routes_file_through_complete_existing_hierarchy(tmp_path: Path) ->
         "Finance (0.90) → Finance/Taxes (0.90) → Finance/Taxes/2026 (0.90)"
     )
 
-    apply_plan(decisions)
-    assert (tmp_path / "Finance" / "Taxes" / "2026" / source.name).is_file()
-
-
 def test_hierarchical_route_stops_at_last_approved_parent(tmp_path: Path) -> None:
     (tmp_path / "Finance" / "Taxes").mkdir(parents=True)
     source = tmp_path / "invoice.txt"
@@ -84,7 +81,7 @@ def test_hierarchical_route_stops_at_last_approved_parent(tmp_path: Path) -> Non
     assert decisions[0].status == DecisionStatus.MOVE
 
 
-def test_apply_skips_existing_destination(tmp_path: Path) -> None:
+def test_collision_resolution_skips_existing_destination(tmp_path: Path) -> None:
     destination_folder = tmp_path / "Receipts"
     destination_folder.mkdir()
     source = tmp_path / "invoice.txt"
@@ -100,7 +97,7 @@ def test_apply_skips_existing_destination(tmp_path: Path) -> None:
         extraction="markitdown",
     )
 
-    apply_plan([decision])
+    resolve_collisions([decision], "skip")
 
     assert decision.status == DecisionStatus.COLLISION
     assert source.exists()
