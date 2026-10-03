@@ -75,9 +75,12 @@ def build_corpus(
         counts.update(words)
         document_counts.update(set(words))
         name_words = normalize_words(item.path.stem.replace("_", " ").replace("-", " "))
-        filename_phrases.update(name_words)
         filename_phrases.update(
-            " ".join(pair) for pair in zip(name_words, name_words[1:], strict=False)
+            set(name_words)
+            | {
+                " ".join(pair)
+                for pair in zip(name_words, name_words[1:], strict=False)
+            }
         )
         name = item.path.name.casefold()
         extensions.update(

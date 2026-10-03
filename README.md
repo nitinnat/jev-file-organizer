@@ -6,6 +6,10 @@ It can use folders you already have or propose new ones from repeated filenames,
 
 > **Pre-release:** JFO is being prepared for its first public release. The package name and installation flow are implemented but not yet published to PyPI.
 
+> **Docker is not required.** End users install JFO as an isolated command-line tool. Docker is used only for reproducible development and CI.
+
+**[Read the complete usage guide](USAGE.md)** · [Roadmap](ROADMAP.md) · [Apache 2.0 license](LICENSE)
+
 ## Why JFO
 
 - **Preview first.** Running `jfo` does not move files.
@@ -29,7 +33,7 @@ flowchart LR
     F -->|jfo undo| A
 ```
 
-JFO walks the tree recursively. At each parent folder, files are evaluated only against its immediate child folders and approved proposed folders. That keeps routing understandable and prevents a single opaque jump across the entire tree.
+JFO walks the tree recursively and simulates every approved hop before changing anything. A file can therefore receive a complete destination such as `Finance/Taxes/2026` in one plan, with every parent-to-child decision clearing the confidence threshold. Existing nested folders can form multi-hop routes; a newly proposed folder is always a leaf for that plan, preventing unbounded generated hierarchies.
 
 ## Quick start
 
@@ -58,6 +62,18 @@ Now organize any folder:
 cd ~/Downloads
 jfo
 ```
+
+The [usage guide](USAGE.md) covers installation, folder selection, previews, applying and undoing plans, configuration, caching, evaluation, and troubleshooting.
+
+Or provide the root-level destinations directly:
+
+```bash
+jfo -f "Finance, Travel, Medical"
+```
+
+The supplied names become the root destination allowlist for that plan. Existing matching
+folders are reused, missing folders are proposed, and unsupported folders are not created.
+Repeat `-f` instead of using commas when that reads better.
 
 The command prints proposed folders, confidence scores, candidate sources, every suggested move, and a plan ID. Nothing has moved yet.
 
@@ -121,6 +137,7 @@ Important controls:
 | Option | Purpose |
 | --- | --- |
 | `--threshold FLOAT` | Placement threshold from `0.70` to `1.00` |
+| `--folders TEXT`, `-f TEXT` | Root destination names, comma-separated or repeated |
 | `--max-pages N` | Retain at most N detected page or slide sections |
 | `--max-chars N` | Cap retained text per file |
 | `--max-new-folders N` | Limit proposed folders per parent |

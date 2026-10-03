@@ -4,24 +4,23 @@ import shutil
 import sys
 from importlib.metadata import version
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.table import Table
-from typesafe_sdk import TypeSafeAPIError
 
-from .classifier import JevClassifier
 from .config import resolve_api_key, save_api_key
-from .discovery import build_corpus
-from .evaluation import Metrics, evaluate, load_manifest, write_report
-from .extraction import TextExtractor
 from .folder_config import initialize_configs, load_guidance
 from .models import Decision, DecisionStatus, ProposedFolder
-from .organizer import create_intelligent_plan, create_plan
 from .plans import PlanError, PlanStore
 from .scanner import scan
+
+if TYPE_CHECKING:
+    from typesafe_sdk import TypeSafeAPIError
+
+    from .evaluation import Metrics
 
 MIN_THRESHOLD = 0.70
 PACKAGE_NAME = "jev-file-organizer"
@@ -91,6 +90,15 @@ def main(
     collision: Annotated[
         str, typer.Option(help="Existing destination policy: skip or rename.")
     ] = "skip",
+    # claim: 2026-09-23-explicit-folder-option
+    folders: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--folders",
+            "-f",
+            help="Root destination names, comma-separated or supplied more than once.",
+        ),
+    ] = None,
     verbose: Annotated[
         bool, typer.Option("--verbose", "-v", help="Show diagnostic logs.")
     ] = False,
@@ -115,6 +123,7 @@ def main(
         refresh_cache,
         include_hidden,
         collision,
+        parse_folder_names(folders or []),
     )
 
 
@@ -193,6 +202,9 @@ def candidates(
     refresh_cache: Annotated[bool, typer.Option("--refresh-cache")] = False,
 ) -> None:
     """Show every locally generated folder candidate before Jev filtering."""
+    from .discovery import build_corpus
+    from .extraction import TextExtractor
+
     root = validated_root(path)
     extractor = TextExtractor(max_chars, max_pages, refresh_cache=refresh_cache)
     rows = []
@@ -277,6 +289,13 @@ def evaluate_command(
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
     """Measure Jev decisions against a labeled manifest without moving files."""
+    from typesafe_sdk import TypeSafeAPIError
+
+    from .classifier import JevClassifier
+    from .evaluation import evaluate, load_manifest, write_report
+    from .extraction import TextExtractor
+    from .organizer import create_plan
+
     configure_logging(verbose)
     root = validated_root(path)
     validate_threshold(threshold)
@@ -314,7 +333,14 @@ def run(
     refresh_cache: bool,
     include_hidden: bool,
     collision: str,
+    requested_folders: tuple[str, ...] = (),
 ) -> None:
+    from typesafe_sdk import TypeSafeAPIError
+
+    from .classifier import JevClassifier
+    from .extraction import TextExtractor
+    from .organizer import create_intelligent_plan
+
     root = validated_root(path)
     validate_threshold(threshold)
     if collision not in {"skip", "rename"}:
@@ -337,6 +363,7 @@ def run(
             discover_folders=discover_folders,
             max_new_folders=max_new_folders,
             min_folder_files=min_folder_files,
+            requested_folders=requested_folders,
         )
     except TypeSafeAPIError as error:
         api_error(error)
@@ -382,6 +409,10 @@ def run(
             f"[dim]Extraction cache: {extractor.cache.hits} hits, "
             f"{extractor.cache.misses} misses.[/dim]"
         )
+        console.print(
+            f"[dim]Jev classification cache: {extractor.cache.classification_hits} hits, "
+            f"{extractor.cache.classification_misses} misses.[/dim]"
+        )
     if not should_apply and moved:
         console.print(f"Run [cyan]jfo apply {plan_id}[/cyan] to perform this exact plan.")
 
@@ -391,6 +422,24 @@ def validated_root(path: Path) -> Path:
     if not root.is_dir():
         raise typer.BadParameter(f"not a directory: {root}")
     return root
+
+
+def parse_folder_names(values: list[str]) -> tuple[str, ...]:
+    validated = []
+    seen = set()
+    for name in (part for value in values for part in value.split(",")):
+        cleaned = " ".join(name.split())
+        if (
+            not cleaned
+            or cleaned in {".", ".."}
+            or Path(cleaned).name != cleaned
+            or "\\" in cleaned
+        ):
+            raise typer.BadParameter(f"invalid folder name: {name!r}")
+        if cleaned.casefold() not in seen:
+            validated.append(cleaned)
+            seen.add(cleaned.casefold())
+    return tuple(validated)
 
 
 def validate_threshold(threshold: float) -> None:
@@ -408,7 +457,7 @@ def require_api_key(root: Path) -> str:
     raise typer.Exit(2)
 
 
-def api_error(error: TypeSafeAPIError) -> None:
+def api_error(error: "TypeSafeAPIError") -> None:
     logging.getLogger(__name__).exception(
         "[JEV] request_failed status=%s request_id=%s", error.status, error.request_id
     )
@@ -473,7 +522,7 @@ def render_plan(root: Path, decisions: list[Decision], apply: bool) -> None:
     console.print(table)
 
 
-def render_metrics(metrics: Metrics) -> None:
+def render_metrics(metrics: "Metrics") -> None:
     table = Table(title="Evaluation", header_style="bold magenta")
     table.add_column("Metric")
     table.add_column("Value", justify="right")

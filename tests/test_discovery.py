@@ -70,6 +70,22 @@ def test_existing_folder_names_are_not_proposed(tmp_path: Path) -> None:
     assert "Finance" not in corpus.candidate_names
 
 
+def test_repeated_words_in_one_filename_count_as_one_file(tmp_path: Path) -> None:
+    corpus = build_corpus(
+        [
+            FileEvidence(
+                tmp_path / "quarterly-financial-review-quarterly-financial-review.txt",
+                "unrelated",
+                "markitdown",
+            )
+        ],
+        existing_folders=(),
+    )
+
+    assert "Quarterly" not in corpus.candidate_names
+    assert "Financial Review" not in corpus.candidate_names
+
+
 class DiscoveryClassifier:
     def discover(
         self,
@@ -121,3 +137,74 @@ def test_discovery_requires_validation_and_file_support(tmp_path: Path) -> None:
     assert result.proposed_folders[0].path == tmp_path / "Finance"
     assert len(result.proposed_folders[0].supporting_files) == 2
     assert all(decision.status == DecisionStatus.MOVE for decision in result.decisions)
+
+
+class RequestedFolderClassifier(DiscoveryClassifier):
+    def discover(
+        self,
+        parent: Path,
+        evidence: list[FileEvidence],
+        corpus: DiscoveryCorpus,
+        guidance: FolderGuidance,
+        threshold: float,
+        min_files: int,
+    ) -> list[ProposedFolder]:
+        raise AssertionError("explicit folder names must bypass automatic discovery")
+
+    def classify(
+        self,
+        parent: Path,
+        evidence: list[FileEvidence],
+        destinations: list[FolderOption],
+        threshold: float,
+        guidance: FolderGuidance,
+    ) -> list[Decision]:
+        assert [option.path.name for option in destinations] == ["Finance", "Travel"]
+        finance = destinations[0].path
+        return [
+            Decision(
+                source=item.path,
+                destination=finance / item.path.name,
+                choice="folder_0",
+                confidence=0.9,
+                status=DecisionStatus.MOVE,
+                extraction=item.extraction,
+            )
+            for item in evidence
+        ]
+
+
+def test_requested_folders_are_the_root_destination_allowlist(tmp_path: Path) -> None:
+    (tmp_path / "Unrelated").mkdir()
+    (tmp_path / "invoice-one.txt").write_text("invoice payment", encoding="utf-8")
+    (tmp_path / "invoice-two.txt").write_text("invoice total", encoding="utf-8")
+
+    result = create_intelligent_plan(
+        tmp_path,
+        RequestedFolderClassifier(),
+        TextExtractor(cache_enabled=False),
+        threshold=0.7,
+        discover_folders=True,
+        requested_folders=("Finance", "Travel"),
+    )
+
+    assert [folder.path.name for folder in result.proposed_folders] == ["Finance"]
+    assert result.proposed_folders[0].rationale == "specified on command line"
+    assert all(decision.destination.parent.name == "Finance" for decision in result.decisions)
+
+
+def test_requested_folders_respect_existing_folders_only(tmp_path: Path) -> None:
+    (tmp_path / "invoice-one.txt").write_text("invoice payment", encoding="utf-8")
+    (tmp_path / "invoice-two.txt").write_text("invoice total", encoding="utf-8")
+
+    result = create_intelligent_plan(
+        tmp_path,
+        RequestedFolderClassifier(),
+        TextExtractor(cache_enabled=False),
+        threshold=0.7,
+        discover_folders=False,
+        requested_folders=("Finance",),
+    )
+
+    assert result.proposed_folders == []
+    assert all(decision.status == DecisionStatus.NO_MATCH for decision in result.decisions)
