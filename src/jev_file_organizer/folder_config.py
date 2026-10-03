@@ -4,13 +4,17 @@ from pathlib import Path
 
 # claim: 2026-09-20-lightweight-local-metadata
 CONFIG_NAME = ".jfo.toml"
-TEMPLATE = '''description = ""
+TEMPLATE = """description = ""
 context = ""
 rules = []
 
 [discovery]
 candidate_names = []
-'''
+
+[privacy]
+exclude = []
+redact = []
+"""
 
 
 @dataclass(frozen=True)
@@ -19,6 +23,8 @@ class FolderConfig:
     context: str = ""
     rules: tuple[str, ...] = ()
     candidate_names: tuple[str, ...] = ()
+    exclude_patterns: tuple[str, ...] = ()
+    redact_patterns: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -34,15 +40,26 @@ def read_folder_config(folder: Path) -> FolderConfig:
         return FolderConfig()
     data = tomllib.loads(path.read_text(encoding="utf-8"))
     discovery = data.get("discovery", {})
+    privacy = data.get("privacy", {})
     return FolderConfig(
         description=str(data.get("description", "")).strip(),
         context=str(data.get("context", "")).strip(),
         rules=tuple(str(rule).strip() for rule in data.get("rules", []) if str(rule).strip()),
         candidate_names=tuple(
-            str(name).strip()
-            for name in discovery.get("candidate_names", [])
-            if str(name).strip()
+            str(name).strip() for name in discovery.get("candidate_names", []) if str(name).strip()
         ),
+        exclude_patterns=tuple(str(value) for value in privacy.get("exclude", [])),
+        redact_patterns=tuple(str(value) for value in privacy.get("redact", [])),
+    )
+
+
+def load_privacy_policy(root: Path):
+    from .privacy import DEFAULT_EXCLUDES, PrivacyPolicy
+
+    config = read_folder_config(root)
+    return PrivacyPolicy(
+        exclude_patterns=DEFAULT_EXCLUDES + config.exclude_patterns,
+        redact_patterns=config.redact_patterns,
     )
 
 

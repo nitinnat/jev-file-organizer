@@ -69,7 +69,7 @@ Pilot baseline: a fully cached 24-file recursive run completed in 3.99 seconds, 
 
 ## 12. Privacy and Data Controls — Planned
 
-Preview the content sent to Jev, redact configured patterns, exclude sensitive paths, cap evidence per file and run, and provide cache inspection and clearing commands.
+Implemented: preview redacted Jev-bound evidence, exclude sensitive paths, redact configured regular expressions before caching and requests, cap evidence per file, and inspect or clear local caches. A whole-run evidence budget remains part of scale controls.
 
 ## 13. Watch Mode — Deferred
 

@@ -32,6 +32,8 @@ app = typer.Typer(
     no_args_is_help=False,
     pretty_exceptions_show_locals=False,
 )
+cache_app = typer.Typer(help="Inspect or clear JFO's local extraction caches.")
+app.add_typer(cache_app, name="cache")
 
 
 @app.callback()
@@ -45,9 +47,7 @@ def main(
             is_eager=True,
         ),
     ] = False,
-    path: Annotated[
-        Path, typer.Option("--path", "-p", help="Folder to organize.")
-    ] = Path("."),
+    path: Annotated[Path, typer.Option("--path", "-p", help="Folder to organize.")] = Path("."),
     apply: Annotated[
         bool, typer.Option("--apply", help="Move approved files after showing the plan.")
     ] = False,
@@ -72,12 +72,8 @@ def main(
             help="Propose missing child folders or use only folders already present.",
         ),
     ] = True,
-    max_new_folders: Annotated[
-        int, typer.Option("--max-new-folders", min=1, max=20)
-    ] = 5,
-    min_folder_files: Annotated[
-        int, typer.Option("--min-folder-files", min=2)
-    ] = 2,
+    max_new_folders: Annotated[int, typer.Option("--max-new-folders", min=1, max=20)] = 5,
+    min_folder_files: Annotated[int, typer.Option("--min-folder-files", min=2)] = 2,
     cache: Annotated[
         bool, typer.Option("--cache/--no-cache", help="Use the per-folder extraction cache.")
     ] = True,
@@ -99,9 +95,7 @@ def main(
             help="Root destination names, comma-separated or supplied more than once.",
         ),
     ] = None,
-    verbose: Annotated[
-        bool, typer.Option("--verbose", "-v", help="Show diagnostic logs.")
-    ] = False,
+    verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Show diagnostic logs.")] = False,
 ) -> None:
     if show_version:
         console.print(version(PACKAGE_NAME))
@@ -200,17 +194,25 @@ def candidates(
     max_chars: Annotated[int, typer.Option("--max-chars", min=100)] = 12_000,
     max_pages: Annotated[int, typer.Option("--max-pages", min=1)] = 5,
     refresh_cache: Annotated[bool, typer.Option("--refresh-cache")] = False,
+    include_hidden: Annotated[bool, typer.Option("--include-hidden")] = False,
 ) -> None:
     """Show every locally generated folder candidate before Jev filtering."""
     from .discovery import build_corpus
     from .extraction import TextExtractor
 
     root = validated_root(path)
-    extractor = TextExtractor(max_chars, max_pages, refresh_cache=refresh_cache)
+    privacy = privacy_policy(root)
+    extractor = TextExtractor(max_chars, max_pages, refresh_cache=refresh_cache, privacy=privacy)
     rows = []
     try:
-        for batch in scan(root, include_without_destinations=True):
-            evidence = [extractor.extract(file) for file in batch.files]
+        for batch in scan(
+            root,
+            include_hidden=include_hidden,
+            include_without_destinations=True,
+        ):
+            evidence = [
+                extractor.extract(file) for file in batch.files if not privacy.excludes(root, file)
+            ]
             guidance = load_guidance(root, batch.parent)
             corpus = build_corpus(evidence, batch.destinations, guidance.candidate_names)
             rows.extend(
@@ -233,6 +235,85 @@ def candidates(
         table.add_row(str(parent) if str(parent) != "." else "root", name, reason)
     console.print(table)
     console.print(f"[dim]{len(rows)} candidates; no Jev request was made.[/dim]")
+
+
+@app.command()
+def payloads(
+    path: Annotated[Path, typer.Argument(help="Folder to inspect.")] = Path("."),
+    max_chars: Annotated[int, typer.Option("--max-chars", min=100)] = 12_000,
+    max_pages: Annotated[int, typer.Option("--max-pages", min=1)] = 5,
+    include_hidden: Annotated[bool, typer.Option("--include-hidden")] = False,
+) -> None:
+    """Preview redacted file evidence and context without contacting Jev."""
+    from .extraction import TextExtractor
+    from .folder_config import read_folder_config
+
+    root = validated_root(path)
+    privacy = privacy_policy(root)
+    extractor = TextExtractor(max_chars, max_pages, privacy=privacy)
+    outbound = []
+    excluded = []
+    try:
+        for batch in scan(
+            root,
+            include_hidden=include_hidden,
+            include_without_destinations=True,
+        ):
+            guidance = load_guidance(root, batch.parent)
+            folders = [
+                {
+                    "name": folder.name,
+                    "description": read_folder_config(folder).description,
+                }
+                for folder in batch.destinations
+            ]
+            for file in batch.files:
+                if privacy.excludes(root, file):
+                    excluded.append(str(file.relative_to(root)))
+                    continue
+                evidence = extractor.extract(file)
+                outbound.append(
+                    privacy.sanitize(
+                        {
+                            "file": str(file.relative_to(root)),
+                            "filename": file.name,
+                            "extracted_text": evidence.content,
+                            "extraction_method": evidence.extraction,
+                            "available_folders": folders,
+                            "organization_context": list(guidance.context),
+                            "organization_rules": list(guidance.rules),
+                        }
+                    )
+                )
+    finally:
+        extractor.flush()
+    console.print_json(data={"excluded": excluded, "payloads": outbound})
+    console.print("[dim]No Jev request was made.[/dim]")
+
+
+@cache_app.command("inspect")
+def inspect_cache(
+    path: Annotated[Path, typer.Argument(help="Folder to inspect.")] = Path("."),
+) -> None:
+    """Summarize local caches without displaying cached content."""
+    from .cache import inspect_caches
+
+    files, entries, classifications, size = inspect_caches(validated_root(path))
+    console.print(
+        f"{files} cache file(s), {entries} extraction(s), "
+        f"{classifications} classification(s), {size} bytes."
+    )
+
+
+@cache_app.command("clear")
+def clear_cache(
+    path: Annotated[Path, typer.Argument(help="Folder whose caches will be removed.")] = Path("."),
+) -> None:
+    """Remove regenerable JFO caches, leaving plans and user files untouched."""
+    from .cache import clear_caches
+
+    removed = clear_caches(validated_root(path))
+    console.print(f"[green]Removed {removed} cache file(s).[/green]")
 
 
 @app.command("apply")
@@ -300,12 +381,11 @@ def evaluate_command(
     root = validated_root(path)
     validate_threshold(threshold)
     api_key = require_api_key(root)
-    classifier = JevClassifier(api_key, model)
+    privacy = privacy_policy(root)
+    classifier = JevClassifier(api_key, model, privacy)
     try:
-        extractor = TextExtractor(max_chars, max_pages)
-        decisions, latency = create_plan(
-            root, classifier, extractor, threshold
-        )
+        extractor = TextExtractor(max_chars, max_pages, privacy=privacy)
+        decisions, latency = create_plan(root, classifier, extractor, threshold, privacy=privacy)
     except TypeSafeAPIError as error:
         api_error(error)
     finally:
@@ -346,13 +426,15 @@ def run(
     if collision not in {"skip", "rename"}:
         raise typer.BadParameter("collision must be 'skip' or 'rename'")
     api_key = require_api_key(root)
-    classifier = JevClassifier(api_key, model)
+    privacy = privacy_policy(root)
+    classifier = JevClassifier(api_key, model, privacy)
     try:
         extractor = TextExtractor(
             max_chars,
             max_pages,
             cache_enabled=cache,
             refresh_cache=refresh_cache,
+            privacy=privacy,
         )
         result = create_intelligent_plan(
             root,
@@ -364,6 +446,7 @@ def run(
             max_new_folders=max_new_folders,
             min_folder_files=min_folder_files,
             requested_folders=requested_folders,
+            privacy=privacy,
         )
     except TypeSafeAPIError as error:
         api_error(error)
@@ -371,6 +454,10 @@ def run(
         classifier.close()
 
     render_proposed_folders(root, result.proposed_folders)
+    if result.excluded_files:
+        console.print(
+            f"[yellow]Excluded {len(result.excluded_files)} file(s) by privacy policy.[/yellow]"
+        )
     store = PlanStore(root)
     plan_id = store.create(
         result.decisions,
@@ -422,6 +509,15 @@ def validated_root(path: Path) -> Path:
     if not root.is_dir():
         raise typer.BadParameter(f"not a directory: {root}")
     return root
+
+
+def privacy_policy(root: Path):
+    from .folder_config import load_privacy_policy
+
+    try:
+        return load_privacy_policy(root)
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from error
 
 
 def parse_folder_names(values: list[str]) -> tuple[str, ...]:
@@ -507,9 +603,7 @@ def render_plan(root: Path, decisions: list[Decision], apply: bool) -> None:
     }
     for decision in decisions:
         destination = (
-            str(decision.destination.parent.relative_to(root))
-            if decision.destination
-            else "—"
+            str(decision.destination.parent.relative_to(root)) if decision.destination else "—"
         )
         table.add_row(
             f"[{styles[decision.status]}]{decision.status.value}[/{styles[decision.status]}]",
