@@ -207,16 +207,16 @@ MarkItDown 0.1.7 does not expose a stop-after-N-pages conversion API, so the ini
 
 ## Measure performance
 
-JFO includes labeled evaluation support for accuracy, move precision and recall, coverage, abstention rate, and end-to-end latency:
+JFO includes a reproducible 22-file mixed-format benchmark and reports accuracy, move precision and recall, coverage, abstention, latency, performance by file type, confidence reliability, and a threshold curve:
 
 ```bash
-poetry run python scripts/generate_sample.py
-poetry run jfo evaluate sample-folder \
-  --manifest sample-manifest.json \
+poetry run python scripts/generate_evaluation_corpus.py
+poetry run jfo evaluate evaluation-corpus \
+  --manifest evaluation-manifest.json \
   --report evaluation-report.json
 ```
 
-Pin `--model` when comparing formal evaluation runs.
+The calibration reuses one Jev run and recommends the highest-coverage tested threshold that reaches `--target-precision` (default `0.95`) on that corpus. Customize the sweep with `--thresholds`. Pin `--model` when comparing formal runs, and do not treat a small-corpus recommendation as a universal guarantee.
 
 ## Development
 

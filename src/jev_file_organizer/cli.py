@@ -20,7 +20,7 @@ from .scanner import scan
 if TYPE_CHECKING:
     from typesafe_sdk import TypeSafeAPIError
 
-    from .evaluation import Metrics
+    from .evaluation import EvaluationAnalysis, Metrics
 
 MIN_THRESHOLD = 0.70
 PACKAGE_NAME = "jev-file-organizer"
@@ -364,6 +364,14 @@ def evaluate_command(
         Path | None, typer.Option("--report", help="Write detailed JSON results here.")
     ] = None,
     threshold: Annotated[float, typer.Option("--threshold", "-t")] = MIN_THRESHOLD,
+    thresholds: Annotated[
+        str,
+        typer.Option(help="Comma-separated confidence thresholds for calibration."),
+    ] = "0.70,0.75,0.80,0.85,0.90,0.95",
+    target_precision: Annotated[
+        float,
+        typer.Option(help="Minimum move precision for a recommended threshold."),
+    ] = 0.95,
     model: Annotated[str, typer.Option("--model")] = "jev-latest",
     max_chars: Annotated[int, typer.Option("--max-chars", min=100)] = 12_000,
     max_pages: Annotated[int, typer.Option("--max-pages", min=1)] = 5,
@@ -373,29 +381,54 @@ def evaluate_command(
     from typesafe_sdk import TypeSafeAPIError
 
     from .classifier import JevClassifier
-    from .evaluation import evaluate, load_manifest, write_report
+    from .evaluation import analyze, evaluate, load_manifest, write_report
     from .extraction import TextExtractor
     from .organizer import create_plan
 
     configure_logging(verbose)
     root = validated_root(path)
     validate_threshold(threshold)
+    if not 0 < target_precision <= 1:
+        raise typer.BadParameter("target precision must be above 0 and at most 1")
+    calibration_thresholds = parse_thresholds(thresholds, threshold)
     api_key = require_api_key(root)
     privacy = privacy_policy(root)
     classifier = JevClassifier(api_key, model, privacy)
     try:
         extractor = TextExtractor(max_chars, max_pages, privacy=privacy)
-        decisions, latency = create_plan(root, classifier, extractor, threshold, privacy=privacy)
+        decisions, latency = create_plan(
+            root, classifier, extractor, MIN_THRESHOLD, privacy=privacy
+        )
     except TypeSafeAPIError as error:
         api_error(error)
     finally:
         classifier.close()
 
-    metrics = evaluate(root, decisions, load_manifest(manifest), latency)
+    expected = load_manifest(manifest)
+    try:
+        analysis = analyze(
+            root,
+            decisions,
+            expected,
+            calibration_thresholds,
+            threshold,
+            target_precision,
+        )
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from error
+    metrics = evaluate(root, decisions, expected, latency, threshold)
+    for decision in decisions:
+        if decision.destination is not None:
+            decision.status = (
+                DecisionStatus.MOVE
+                if decision.confidence >= threshold
+                else DecisionStatus.LOW_CONFIDENCE
+            )
     render_plan(root, decisions, apply=False)
     render_metrics(metrics)
+    render_analysis(analysis)
     if report:
-        write_report(report, root, decisions, metrics)
+        write_report(report, root, decisions, metrics, analysis)
         console.print(f"[green]Report written to {report}[/green]")
 
 
@@ -543,6 +576,17 @@ def validate_threshold(threshold: float) -> None:
         raise typer.BadParameter("threshold must be between 0.70 and 1.00")
 
 
+def parse_thresholds(value: str, selected: float) -> tuple[float, ...]:
+    try:
+        thresholds = {float(part.strip()) for part in value.split(",") if part.strip()}
+    except ValueError as error:
+        raise typer.BadParameter("thresholds must be comma-separated numbers") from error
+    thresholds.add(selected)
+    if not thresholds or any(not MIN_THRESHOLD <= threshold <= 1 for threshold in thresholds):
+        raise typer.BadParameter("calibration thresholds must be between 0.70 and 1.00")
+    return tuple(sorted(thresholds))
+
+
 def require_api_key(root: Path) -> str:
     if api_key := resolve_api_key(root):
         return api_key
@@ -631,6 +675,69 @@ def render_metrics(metrics: "Metrics") -> None:
     for name, value in values.items():
         table.add_row(name, value)
     console.print(table)
+
+
+def render_analysis(analysis: "EvaluationAnalysis") -> None:
+    curve = Table(title="Threshold calibration", header_style="bold magenta")
+    for column in ("Threshold", "Precision", "Recall", "Coverage", "Accuracy", "Moves"):
+        curve.add_column(column, justify="right")
+    for threshold, metrics in analysis.thresholds.items():
+        curve.add_row(
+            threshold,
+            f"{metrics.precision:.1%}",
+            f"{metrics.recall:.1%}",
+            f"{metrics.coverage:.1%}",
+            f"{metrics.accuracy:.1%}",
+            str(metrics.predicted_moves),
+        )
+    console.print(curve)
+    if analysis.recommended_threshold is None:
+        console.print(
+            f"[yellow]No tested threshold reached "
+            f"{analysis.target_precision:.0%} precision.[/yellow]"
+        )
+    else:
+        console.print(
+            f"[green]Recommended threshold on this corpus: "
+            f"{analysis.recommended_threshold:.2f}[/green] "
+            f"(target precision {analysis.target_precision:.0%})."
+        )
+
+    bands = Table(title="Confidence reliability", header_style="bold cyan")
+    bands.add_column("Band")
+    bands.add_column("Selections", justify="right")
+    bands.add_column("Mean confidence", justify="right")
+    bands.add_column("Observed accuracy", justify="right")
+    for band in analysis.confidence_bands:
+        bands.add_row(
+            band.label,
+            str(band.total),
+            f"{band.mean_confidence:.1%}",
+            f"{band.accuracy:.1%}",
+        )
+    console.print(bands)
+
+    types = Table(title="Performance by file type", header_style="bold cyan")
+    types.add_column("Type")
+    types.add_column("Files", justify="right")
+    types.add_column("Precision", justify="right")
+    types.add_column("Recall", justify="right")
+    types.add_column("Coverage", justify="right")
+    for extension, metrics in analysis.by_extension.items():
+        types.add_row(
+            extension,
+            str(metrics.total),
+            f"{metrics.precision:.1%}",
+            f"{metrics.recall:.1%}",
+            f"{metrics.coverage:.1%}",
+        )
+    console.print(types)
+
+    console.print(
+        "[dim]Actions: "
+        + ", ".join(f"{name.replace('_', ' ')}={count}" for name, count in analysis.actions.items())
+        + "[/dim]"
+    )
 
 
 def configure_logging(verbose: bool) -> None:
