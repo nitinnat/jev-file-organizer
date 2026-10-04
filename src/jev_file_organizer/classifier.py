@@ -13,19 +13,21 @@ from .models import (
     FolderOption,
     ProposedFolder,
 )
+from .privacy import PrivacyPolicy
 
 logger = logging.getLogger(__name__)
 CLASSIFICATION_PROMPT_VERSION = 2
 
 
 class JevClassifier:
-    def __init__(self, api_key: str, model: str) -> None:
+    def __init__(self, api_key: str, model: str, privacy: PrivacyPolicy | None = None) -> None:
         self._client = TypeSafeClient(
             api_key=api_key,
             model=model,
             retry=RetryPolicy(max_retries=3, backoff_max=0.5, timeout=10.0),
         )
         self.cache_namespace = f"{model}:classification-v{CLASSIFICATION_PROMPT_VERSION}"
+        self._privacy = privacy or PrivacyPolicy()
 
     def close(self) -> None:
         self._client.close()
@@ -46,29 +48,29 @@ class JevClassifier:
             len(destinations),
             threshold,
         )
-        folder_ids = {
-            f"folder_{index}": option for index, option in enumerate(destinations)
-        }
+        folder_ids = {f"folder_{index}": option for index, option in enumerate(destinations)}
         # claim: 2026-09-20-folder-discovery-confidence
         decisions = []
         for item in evidence:
-            state = {
-                "file": {
-                    "filename": item.path.name,
-                    "extracted_text": item.content,
-                    "extraction_method": item.extraction,
-                },
-                "available_folders": [
-                    {
-                        "name": option.path.name,
-                        "description": option.description,
-                        "status": "proposed" if option.proposed else "existing",
-                    }
-                    for option in destinations
-                ],
-                "organization_context": list(guidance.context),
-                "organization_rules": list(guidance.rules),
-            }
+            state = self._policy.sanitize(
+                {
+                    "file": {
+                        "filename": item.path.name,
+                        "extracted_text": item.content,
+                        "extraction_method": item.extraction,
+                    },
+                    "available_folders": [
+                        {
+                            "name": option.path.name,
+                            "description": option.description,
+                            "status": "proposed" if option.proposed else "existing",
+                        }
+                        for option in destinations
+                    ],
+                    "organization_context": list(guidance.context),
+                    "organization_rules": list(guidance.rules),
+                }
+            )
             questions = {
                 f"folder_{folder_index}": Noul(
                     instructions=(
@@ -135,26 +137,28 @@ class JevClassifier:
             threshold,
         )
         # claim: 2026-09-20-folder-discovery-confidence
-        state = {
-            "file_count": len(evidence),
-            "minimum_files_per_folder": min_files,
-            "word_counts": [
-                {
-                    "word": stat.word,
-                    "count": stat.count,
-                    "documents": stat.documents,
-                }
-                for stat in corpus.words
-            ],
-            "files": [
-                {"filename": item.path.name, "sample": item.content[:1_500]}
-                for item in evidence
-            ],
-            "candidate_folders": list(corpus.candidate_names),
-            "candidate_sources": list(corpus.candidate_reasons),
-            "organization_context": list(guidance.context),
-            "organization_rules": list(guidance.rules),
-        }
+        state = self._policy.sanitize(
+            {
+                "file_count": len(evidence),
+                "minimum_files_per_folder": min_files,
+                "word_counts": [
+                    {
+                        "word": stat.word,
+                        "count": stat.count,
+                        "documents": stat.documents,
+                    }
+                    for stat in corpus.words
+                ],
+                "files": [
+                    {"filename": item.path.name, "sample": item.content[:1_500]}
+                    for item in evidence
+                ],
+                "candidate_folders": list(corpus.candidate_names),
+                "candidate_sources": list(corpus.candidate_reasons),
+                "organization_context": list(guidance.context),
+                "organization_rules": list(guidance.rules),
+            }
+        )
         questions = {
             f"candidate_{index}": Noul(
                 instructions=(
@@ -192,3 +196,7 @@ class JevClassifier:
             len(proposed),
         )
         return proposed
+
+    @property
+    def _policy(self) -> PrivacyPolicy:
+        return getattr(self, "_privacy", PrivacyPolicy())

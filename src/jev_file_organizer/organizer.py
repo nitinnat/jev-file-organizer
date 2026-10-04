@@ -16,6 +16,7 @@ from .models import (
     FolderOption,
     ProposedFolder,
 )
+from .privacy import PrivacyPolicy
 from .scanner import child_folders, scan
 
 logger = logging.getLogger(__name__)
@@ -47,6 +48,7 @@ class PlanningResult:
     decisions: list[Decision]
     proposed_folders: list[ProposedFolder]
     latency_seconds: float
+    excluded_files: list[Path]
 
 
 def create_plan(
@@ -55,6 +57,7 @@ def create_plan(
     extractor: TextExtractor,
     threshold: float,
     include_hidden: bool = False,
+    privacy: PrivacyPolicy | None = None,
 ) -> tuple[list[Decision], float]:
     result = create_intelligent_plan(
         root,
@@ -62,6 +65,7 @@ def create_plan(
         extractor,
         threshold,
         include_hidden=include_hidden,
+        privacy=privacy,
     )
     return result.decisions, result.latency_seconds
 
@@ -76,12 +80,15 @@ def create_intelligent_plan(
     max_new_folders: int = 5,
     min_folder_files: int = 2,
     requested_folders: tuple[str, ...] = (),
+    privacy: PrivacyPolicy | None = None,
 ) -> PlanningResult:
     started = time.perf_counter()
     all_proposed: list[ProposedFolder] = []
     outcomes: dict[Path, Decision] = {}
     source_order: list[Path] = []
     routes: dict[Path, list[str]] = {}
+    privacy = privacy or PrivacyPolicy()
+    excluded_files: list[Path] = []
     try:
         batches = scan(
             root,
@@ -91,8 +98,15 @@ def create_intelligent_plan(
         pending: dict[Path, list[FileEvidence]] = {}
         destinations = {batch.parent: batch.destinations for batch in batches}
         for batch in batches:
-            pending[batch.parent] = [extractor.extract(path) for path in batch.files]
-            source_order.extend(batch.files)
+            included = []
+            for path in batch.files:
+                if privacy.excludes(root, path):
+                    excluded_files.append(path)
+                else:
+                    included.append(path)
+            if included:
+                pending[batch.parent] = [extractor.extract(path) for path in included]
+                source_order.extend(included)
 
         # claim: 2026-10-03-complete-hierarchical-routing
         while pending:
@@ -210,9 +224,7 @@ def create_intelligent_plan(
 
                 next_parent = decision.destination.parent
                 if next_parent.is_dir():
-                    pending.setdefault(next_parent, []).append(
-                        evidence_by_source[decision.source]
-                    )
+                    pending.setdefault(next_parent, []).append(evidence_by_source[decision.source])
 
             extractor.flush()
     finally:
@@ -227,6 +239,7 @@ def create_intelligent_plan(
         decisions=decisions,
         proposed_folders=all_proposed,
         latency_seconds=time.perf_counter() - started,
+        excluded_files=excluded_files,
     )
 
 

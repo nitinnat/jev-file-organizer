@@ -185,7 +185,17 @@ JFO uses Microsoft MarkItDown for every supported format. If a format is unsuppo
 
 MarkItDown may still process an entire document before JFO truncates the retained result. JFO stores reusable evidence in `.jfo-cache.json`, keyed by filename, size, modification time, extraction settings, and cache version. Use `--refresh-cache` after changing extraction behavior or when you want to force conversion again.
 
-Jev receives filenames, bounded evidence, local word counts, candidate names and sources, and applicable rules or context. Plans are stored under `.jfo/plans/`. The cache and plans may contain sensitive text or metadata; treat them accordingly.
+Jev receives filenames, bounded evidence, local word counts, candidate names and sources, and applicable rules or context. `.env`, private keys, and certificate bundles are excluded by default. Add root-level project rules when needed:
+
+```toml
+[privacy]
+exclude = ["private/**"]
+redact = ["(?i)account-[0-9]+"]
+```
+
+`exclude` values are path globs relative to the organized root. `redact` values are regular expressions replaced with `[REDACTED]` before evidence enters the cache and again before a Jev request. Invalid regular expressions stop the run with an error.
+
+Use `jfo payloads .` to inspect the redacted payload evidence without contacting Jev. Add `--include-hidden` to audit hidden inputs too. Use `jfo cache inspect .` for cache counts and size, or `jfo cache clear .` to remove regenerable extraction and classification caches. Plans under `.jfo/plans/` are left untouched.
 
 ## Measure organizer performance
 

@@ -187,7 +187,17 @@ To classify files, JFO sends Jev:
 
 The TypeSafe API key is stored in the operating system's user configuration directory with user-only permissions. You may instead provide `TYPESAFE_API_KEY` through the environment. Do not commit `.env` files.
 
-Bounded extracted evidence is cached locally in `.jfo-cache.json`. Plans live under `.jfo/plans/`. Both may contain sensitive metadata or text and are ignored by the supplied `.gitignore`.
+Credential files such as `.env`, private keys, and certificate bundles are excluded by default. Add project-specific rules to the root `.jfo.toml`:
+
+```toml
+[privacy]
+exclude = ["private/**", "**/secrets/**"]
+redact = ["(?i)customer-[0-9]+", "[A-Za-z0-9._%+-]+@example\\.com"]
+```
+
+Run `jfo payloads . --include-hidden` to inspect the redacted evidence and context that may be sent to Jev; this command makes no Jev request. `jfo cache inspect .` summarizes local caches without displaying their contents, and `jfo cache clear .` removes only regenerable cache files.
+
+Redaction happens before extracted evidence is written to `.jfo-cache.json` and again at the final Jev request boundary. Plans live under `.jfo/plans/`; they contain filenames and routing metadata but not extracted document text. Both caches and plans are ignored by the supplied `.gitignore`.
 
 ## Extraction behavior
 
@@ -225,7 +235,7 @@ Run against another folder without installing locally:
 JFO_TARGET=/absolute/path docker compose run --rm jfo
 ```
 
-The project supports Python 3.12 and 3.13. See `ROADMAP.md` for planned privacy controls, correction learning, richer explanations, scale controls, and public distribution work.
+The project supports Python 3.12 and 3.13. See `ROADMAP.md` for correction learning, richer explanations, scale controls, and public distribution work.
 
 ## Public release status
 

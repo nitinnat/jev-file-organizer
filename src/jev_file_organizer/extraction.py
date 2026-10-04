@@ -6,6 +6,7 @@ from markitdown import MarkItDown, UnsupportedFormatException
 
 from .cache import ExtractionCache
 from .models import FileEvidence
+from .privacy import PrivacyPolicy
 
 logger = logging.getLogger(__name__)
 
@@ -20,15 +21,18 @@ class TextExtractor:
         max_pages: int = 5,
         cache_enabled: bool = True,
         refresh_cache: bool = False,
+        privacy: PrivacyPolicy | None = None,
     ) -> None:
         self._converter = MarkItDown(enable_plugins=False)
         self._max_chars = max_chars
         self._max_pages = max_pages
+        self._privacy = privacy or PrivacyPolicy()
         self.cache = ExtractionCache(
             enabled=cache_enabled,
             refresh=refresh_cache,
             max_pages=max_pages,
             max_chars=max_chars,
+            policy_key=self._privacy.cache_key,
         )
 
     def extract(self, path: Path) -> FileEvidence:
@@ -51,7 +55,9 @@ class TextExtractor:
             content = path.name
             extraction = "filename_conversion_error"
 
-        content = limit_pages(content, self._max_pages)[: self._max_chars] or path.name
+        content = self._privacy.redact(
+            limit_pages(content, self._max_pages)[: self._max_chars] or path.name
+        )
         evidence = FileEvidence(path=path, content=content, extraction=extraction)
         self.cache.put(evidence)
         logger.info(

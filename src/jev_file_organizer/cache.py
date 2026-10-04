@@ -7,7 +7,7 @@ from .models import FileEvidence
 
 # claim: 2026-09-20-lightweight-local-metadata
 CACHE_NAME = ".jfo-cache.json"
-CACHE_VERSION = 1
+CACHE_VERSION = 2
 
 
 class CacheDocument(TypedDict):
@@ -22,11 +22,13 @@ class ExtractionCache:
         refresh: bool = False,
         max_pages: int = 5,
         max_chars: int = 12_000,
+        policy_key: str = "",
     ) -> None:
         self.enabled = enabled
         self.refresh = refresh
         self.max_pages = max_pages
         self.max_chars = max_chars
+        self.policy_key = policy_key
         self.hits = 0
         self.misses = 0
         self.classification_hits = 0
@@ -121,6 +123,7 @@ class ExtractionCache:
         return (
             f"v{CACHE_VERSION}:{stat.st_size}:{stat.st_mtime_ns}:"
             f"{self.max_pages}:{self.max_chars}"
+            f":{self.policy_key}"
         )
 
     def _entries(self, folder: Path) -> dict[str, object]:
@@ -145,3 +148,38 @@ class ExtractionCache:
                     "entries": document["entries"],
                 }
         return self._documents[folder]["entries"]
+
+
+def inspect_caches(root: Path) -> tuple[int, int, int, int]:
+    paths = cache_paths(root)
+    entries = classifications = size = 0
+    for path in paths:
+        size += path.stat().st_size
+        try:
+            document = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if not isinstance(document, dict) or not isinstance(document.get("entries"), dict):
+            continue
+        for entry in document["entries"].values():
+            if isinstance(entry, dict):
+                entries += 1
+                records = entry.get("classifications", {})
+                classifications += len(records) if isinstance(records, dict) else 0
+    return len(paths), entries, classifications, size
+
+
+def clear_caches(root: Path) -> int:
+    paths = cache_paths(root)
+    for path in paths:
+        path.unlink()
+    return len(paths)
+
+
+def cache_paths(root: Path) -> list[Path]:
+    ignored = {".git", ".jfo", ".venv", "__pycache__"}
+    return [
+        path
+        for path in root.rglob(CACHE_NAME)
+        if not ignored.intersection(path.relative_to(root).parts)
+    ]
