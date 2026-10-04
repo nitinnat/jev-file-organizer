@@ -61,11 +61,11 @@ Add bounded concurrency, request chunking, rate limiting, cache statistics, esti
 
 First slice complete: lightweight commands now defer MarkItDown, ONNX Runtime, and the TypeSafe SDK until a command actually needs extraction or model access. Five isolated launches improved from a 0.770-second average to 0.096 seconds, with the first launch falling from 1.807 to 0.153 seconds. Next slices are request-count previews and hard budgets, then bounded Jev concurrency with rate-limit tests.
 
-## 11. Evaluation and Confidence Calibration — Planned
+## 11. Evaluation and Confidence Calibration — Baseline Implemented
 
-Build live Jev benchmarks spanning Office documents, PDFs, email, images, audio, archives, ambiguous cases, corrupt inputs, prompt injection, collisions, and deep trees. Report performance by file type, confidence band, and action type.
+The reproducible baseline spans Office documents, PDF, email, images, audio, archives, ambiguous cases, corrupt inputs, prompt injection, a collision, and deep trees. Evaluation validates manifest completeness, reports performance by file type and action type, measures observed accuracy by confidence band, and derives precision/recall/coverage curves from one Jev run. Threshold recommendations maximize recall and coverage while meeting a configurable target precision on the evaluated corpus.
 
-Pilot baseline: a fully cached 24-file recursive run completed in 3.99 seconds, with 17 approved moves and seven abstentions. This is a product smoke test, not a statistically useful benchmark.
+The earlier fully cached 24-file recursive run remains a product smoke test, not a statistically useful benchmark. Next: collect repeated pinned-model runs, add enough labeled examples per file type for useful confidence intervals, and publish versioned baseline reports in releases.
 
 ## 12. Privacy and Data Controls — Planned
 

@@ -87,3 +87,7 @@ def test_candidates_explains_file_type_source_without_api(tmp_path: Path) -> Non
     assert "Software Installers" in result.stdout
     assert "2 .dmg" in result.stdout
     assert "no Jev request was made" in result.stdout
+
+
+def test_evaluation_threshold_parser_includes_selected_threshold() -> None:
+    assert cli.parse_thresholds("0.70, 0.90", 0.8) == (0.7, 0.8, 0.9)

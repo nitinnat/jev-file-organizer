@@ -199,16 +199,18 @@ Use `jfo payloads .` to inspect the redacted payload evidence without contacting
 
 ## Measure organizer performance
 
-JFO can evaluate decisions against a labeled JSON manifest without moving files:
+JFO can evaluate decisions against a labeled JSON manifest without moving files. The bundled benchmark spans deep paths, Office documents, PDF, image, email-like text, audio, archive, corrupt, ambiguous, collision, and prompt-injection cases:
 
 ```bash
-poetry run python scripts/generate_sample.py
-poetry run jfo evaluate sample-folder \
-  --manifest sample-manifest.json \
+poetry run python scripts/generate_evaluation_corpus.py
+poetry run jfo evaluate evaluation-corpus \
+  --manifest evaluation-manifest.json \
+  --thresholds 0.70,0.75,0.80,0.85,0.90,0.95 \
+  --target-precision 0.95 \
   --report evaluation-report.json
 ```
 
-The report includes accuracy, move precision and recall, coverage, abstention rate, and end-to-end latency. Pin `--model` when comparing formal runs.
+One minimum-threshold Jev run supplies the scores for the threshold curve, so calibration does not repeat equivalent model requests. JFO also reports results by file extension, observed accuracy by confidence band, and correct/wrong moves and abstentions. It rejects missing, unsafe, or incomplete manifests instead of silently producing misleading metrics. Pin `--model` when comparing formal runs.
 
 ## Troubleshooting
 
